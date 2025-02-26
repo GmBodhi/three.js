@@ -186,6 +186,15 @@ class WebGLBackend extends Backend {
 		 */
 		this._knownBindings = new WeakSet();
 
+
+		/**
+		 * Whether the device supports framebuffers invalidation or not.
+		 *
+		 * @private
+		 * @type {boolean}
+		 */
+		this._supportsInvalidateFramebuffer = typeof navigator === 'undefined' ? false : /OculusBrowser/g.test( navigator.userAgent );
+
 		/**
 		 * The target framebuffer when rendering with
 		 * the WebXR device API.
@@ -194,7 +203,7 @@ class WebGLBackend extends Backend {
 		 * @type {WebGLFramebuffer}
 		 * @default null
 		 */
-		this._xrFamebuffer = null;
+		this._xrFramebuffer = null;
 
 	}
 
@@ -212,10 +221,10 @@ class WebGLBackend extends Backend {
 		const parameters = this.parameters;
 
 		const contextAttributes = {
-			antialias: false, // MSAA is applied via a custom renderbuffer
+			antialias: renderer.samples > 0,
 			alpha: true, // always true for performance reasons
-			depth: false, // depth and stencil are set to false since the engine always renders into a framebuffer target first
-			stencil: false
+			depth: renderer.depth,
+			stencil: renderer.stencil
 		};
 
 		const glContext = ( parameters.context !== undefined ) ? parameters.context : renderer.domElement.getContext( 'webgl2', contextAttributes );
@@ -322,11 +331,11 @@ class WebGLBackend extends Backend {
 	/**
 	 * Sets the XR rendering destination.
 	 *
-	 * @param {WebGLFramebuffer} xrFamebuffer - The XR framebuffer.
+	 * @param {WebGLFramebuffer} xrFramebuffer - The XR framebuffer.
 	 */
-	setXRTarget( xrFamebuffer ) {
+	setXRTarget( xrFramebuffer ) {
 
-		this._xrFamebuffer = xrFamebuffer;
+		this._xrFramebuffer = xrFramebuffer;
 
 	}
 
@@ -498,6 +507,8 @@ class WebGLBackend extends Backend {
 		const renderContextData = this.get( renderContext );
 		const previousContext = renderContextData.previousContext;
 
+		state.resetVertexState();
+
 		const occlusionQueryCount = renderContext.occlusionQueryCount;
 
 		if ( occlusionQueryCount > 0 ) {
@@ -562,12 +573,22 @@ class WebGLBackend extends Backend {
 						const viewY = renderContext.height - height - y;
 
 						gl.blitFramebuffer( x, viewY, x + width, viewY + height, x, viewY, x + width, viewY + height, mask, gl.NEAREST );
-						gl.invalidateSubFramebuffer( gl.READ_FRAMEBUFFER, renderTargetContextData.invalidationArray, x, viewY, width, height );
+
+						if ( this._supportsInvalidateFramebuffer === true ) {
+
+							gl.invalidateSubFramebuffer( gl.READ_FRAMEBUFFER, renderTargetContextData.invalidationArray, x, viewY, width, height );
+
+						}
 
 					} else {
 
 						gl.blitFramebuffer( 0, 0, renderContext.width, renderContext.height, 0, 0, renderContext.width, renderContext.height, mask, gl.NEAREST );
-						gl.invalidateFramebuffer( gl.READ_FRAMEBUFFER, renderTargetContextData.invalidationArray );
+
+						if ( this._supportsInvalidateFramebuffer === true ) {
+
+							gl.invalidateFramebuffer( gl.READ_FRAMEBUFFER, renderTargetContextData.invalidationArray );
+
+						}
 
 					}
 
@@ -707,6 +728,27 @@ class WebGLBackend extends Backend {
 	}
 
 	/**
+	 * Returns the clear color and alpha into a single
+	 * color object.
+	 *
+	 * @return {Color4} The clear color.
+	 */
+	getClearColor() {
+
+		const clearColor = super.getClearColor();
+
+		// Since the canvas is always created with alpha: true,
+		// WebGL must always premultiply the clear color.
+
+		clearColor.r *= clearColor.a;
+		clearColor.g *= clearColor.a;
+		clearColor.b *= clearColor.a;
+
+		return clearColor;
+
+	}
+
+	/**
 	 * Performs a clear operation.
 	 *
 	 * @param {boolean} color - Whether the color buffer should be cleared or not.
@@ -717,17 +759,11 @@ class WebGLBackend extends Backend {
 	 */
 	clear( color, depth, stencil, descriptor = null, setFrameBuffer = true ) {
 
-		const { gl } = this;
+		const { gl, renderer } = this;
 
 		if ( descriptor === null ) {
 
 			const clearColor = this.getClearColor();
-
-			// premultiply alpha
-
-			clearColor.r *= clearColor.a;
-			clearColor.g *= clearColor.a;
-			clearColor.b *= clearColor.a;
 
 			descriptor = {
 				textures: null,
@@ -756,13 +792,10 @@ class WebGLBackend extends Backend {
 
 				clearColor = this.getClearColor();
 
-				// premultiply alpha
-
-				clearColor.r *= clearColor.a;
-				clearColor.g *= clearColor.a;
-				clearColor.b *= clearColor.a;
-
 			}
+
+			const clearDepth = renderer.getClearDepth();
+			const clearStencil = renderer.getClearStencil();
 
 			if ( depth ) this.state.setDepthMask( true );
 
@@ -779,7 +812,15 @@ class WebGLBackend extends Backend {
 
 					for ( let i = 0; i < descriptor.textures.length; i ++ ) {
 
-						gl.clearBufferfv( gl.COLOR, i, [ clearColor.r, clearColor.g, clearColor.b, clearColor.a ] );
+						if ( i === 0 ) {
+
+							gl.clearBufferfv( gl.COLOR, i, [ clearColor.r, clearColor.g, clearColor.b, clearColor.a ] );
+
+						} else {
+
+							gl.clearBufferfv( gl.COLOR, i, [ 0, 0, 0, 1 ] );
+
+						}
 
 					}
 
@@ -787,15 +828,15 @@ class WebGLBackend extends Backend {
 
 				if ( depth && stencil ) {
 
-					gl.clearBufferfi( gl.DEPTH_STENCIL, 0, 1, 0 );
+					gl.clearBufferfi( gl.DEPTH_STENCIL, 0, clearDepth, clearStencil );
 
 				} else if ( depth ) {
 
-					gl.clearBufferfv( gl.DEPTH, 0, [ 1.0 ] );
+					gl.clearBufferfv( gl.DEPTH, 0, [ clearDepth ] );
 
 				} else if ( stencil ) {
 
-					gl.clearBufferiv( gl.STENCIL, 0, [ 0 ] );
+					gl.clearBufferiv( gl.STENCIL, 0, [ clearStencil ] );
 
 				}
 
@@ -842,17 +883,17 @@ class WebGLBackend extends Backend {
 
 		const { programGPU, transformBuffers, attributes } = this.get( pipeline );
 
-		const vaoKey = this._getVaoKey( null, attributes );
+		const vaoKey = this._getVaoKey( attributes );
 
 		const vaoGPU = this.vaoCache[ vaoKey ];
 
 		if ( vaoGPU === undefined ) {
 
-			this._createVao( null, attributes );
+			this._createVao( attributes );
 
 		} else {
 
-			gl.bindVertexArray( vaoGPU );
+			state.setVertexState( vaoGPU );
 
 		}
 
@@ -950,7 +991,7 @@ class WebGLBackend extends Backend {
 
 		state.useProgram( programGPU );
 
-		//
+		// vertex state
 
 		const renderObjectData = this.get( renderObject );
 
@@ -958,7 +999,7 @@ class WebGLBackend extends Backend {
 
 		if ( vaoGPU === undefined || renderObjectData.geometryId !== renderObject.geometry.id ) {
 
-			const vaoKey = this._getVaoKey( renderObject.getIndex(), renderObject.getAttributes() );
+			const vaoKey = this._getVaoKey( renderObject.getAttributes() );
 
 			vaoGPU = this.vaoCache[ vaoKey ];
 
@@ -966,7 +1007,7 @@ class WebGLBackend extends Backend {
 
 				let staticVao;
 
-				( { vaoGPU, staticVao } = this._createVao( renderObject.getIndex(), renderObject.getAttributes() ) );
+				( { vaoGPU, staticVao } = this._createVao( renderObject.getAttributes() ) );
 
 				if ( staticVao ) {
 
@@ -979,11 +1020,10 @@ class WebGLBackend extends Backend {
 
 		}
 
-		gl.bindVertexArray( vaoGPU );
-
-		//
-
 		const index = renderObject.getIndex();
+		const indexGPU = ( index !== null ) ? this.get( index ).bufferGPU : null;
+
+		state.setVertexState( vaoGPU, indexGPU );
 
 		//
 
@@ -1064,6 +1104,8 @@ class WebGLBackend extends Backend {
 
 				if ( object._multiDrawInstances !== null ) {
 
+					// @deprecated, r174
+					warnOnce( 'THREE.WebGLBackend: renderMultiDrawInstances has been deprecated and will be removed in r184. Append to renderMultiDraw arguments and use indirection.' );
 					renderer.renderMultiDrawInstances( object._multiDrawStarts, object._multiDrawCounts, object._multiDrawCount, object._multiDrawInstances );
 
 				} else if ( ! this.hasFeature( 'WEBGL_multi_draw' ) ) {
@@ -1152,10 +1194,6 @@ class WebGLBackend extends Backend {
 			draw();
 
 		}
-
-		//
-
-		gl.bindVertexArray( null );
 
 	}
 
@@ -1912,7 +1950,7 @@ class WebGLBackend extends Backend {
 
 			} else if ( isXRRenderTarget && hasExternalTextures === false ) {
 
-				fb = this._xrFamebuffer;
+				fb = this._xrFramebuffer;
 
 			} else {
 
@@ -2135,21 +2173,12 @@ class WebGLBackend extends Backend {
 	 * Computes the VAO key for the given index and attributes.
 	 *
 	 * @private
-	 * @param {?BufferAttribute} index - The index. `null` for non-indexed geometries.
 	 * @param {Array<BufferAttribute>} attributes - An array of buffer attributes.
 	 * @return {string} The VAO key.
 	 */
-	_getVaoKey( index, attributes ) {
+	_getVaoKey( attributes ) {
 
 		let key = '';
-
-		if ( index !== null ) {
-
-			const indexData = this.get( index );
-
-			key += ':' + indexData.id;
-
-		}
 
 		for ( let i = 0; i < attributes.length; i ++ ) {
 
@@ -2167,11 +2196,10 @@ class WebGLBackend extends Backend {
 	 * Creates a VAO from the index and attributes.
 	 *
 	 * @private
-	 * @param {?BufferAttribute} index - The index. `null` for non-indexed geometries.
 	 * @param {Array<BufferAttribute>} attributes - An array of buffer attributes.
 	 * @return {Object} The VAO data.
 	 */
-	_createVao( index, attributes ) {
+	_createVao( attributes ) {
 
 		const { gl } = this;
 
@@ -2181,16 +2209,6 @@ class WebGLBackend extends Backend {
 		let staticVao = true;
 
 		gl.bindVertexArray( vaoGPU );
-
-		if ( index !== null ) {
-
-			const indexData = this.get( index );
-
-			gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexData.bufferGPU );
-
-			key += ':' + indexData.id;
-
-		}
 
 		for ( let i = 0; i < attributes.length; i ++ ) {
 

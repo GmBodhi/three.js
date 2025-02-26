@@ -12,7 +12,7 @@ import { addMethodChaining, nodeObject } from '../tsl/TSLCore.js';
  *
  * const redColor = tintColors.element( 0 );
  *
- * @augments Node
+ * @augments TempNode
  */
 class ArrayNode extends TempNode {
 
@@ -25,8 +25,8 @@ class ArrayNode extends TempNode {
 	/**
 	 * Constructs a new array node.
 	 *
-	 * @param {string} [nodeType] - The data type of the elements.
-	 * @param {number} [count] - Size of the array.
+	 * @param {?string} nodeType - The data type of the elements.
+	 * @param {number} count - Size of the array.
 	 * @param {?Array<Node>} [values=null] - Array default values.
 	 */
 	constructor( nodeType, count, values = null ) {
@@ -58,6 +58,12 @@ class ArrayNode extends TempNode {
 
 	}
 
+	/**
+	 * Returns the node's type.
+	 *
+	 * @param {NodeBuilder} builder - The current node builder.
+	 * @return {string} The type of the node.
+	 */
 	getNodeType( builder ) {
 
 		if ( this.nodeType === null ) {
@@ -70,12 +76,24 @@ class ArrayNode extends TempNode {
 
 	}
 
+	/**
+	 * Returns the node's type.
+	 *
+	 * @param {NodeBuilder} builder - The current node builder.
+	 * @return {string} The type of the node.
+	 */
 	getElementType( builder ) {
 
 		return this.getNodeType( builder );
 
 	}
 
+	/**
+	 * This method builds the output node and returns the resulting array as a shader string.
+	 *
+	 * @param {NodeBuilder} builder - The current node builder.
+	 * @return {string} The generated shader string.
+	 */
 	generate( builder ) {
 
 		const type = this.getNodeType( builder );

@@ -15,6 +15,7 @@ import WebGPUTextureUtils from './utils/WebGPUTextureUtils.js';
 
 import { WebGPUCoordinateSystem } from '../../constants.js';
 import WebGPUTimestampQueryPool from './utils/WebGPUTimestampQueryPool.js';
+import { warnOnce } from '../../utils.js';
 
 /**
  * A backend implementation targeting WebGPU.
@@ -441,13 +442,23 @@ class WebGPUBackend extends Backend {
 
 				}
 
+				// only apply the user-defined clearValue to the first color attachment like in beginRender()
+
+				let clearValue = { r: 0, g: 0, b: 0, a: 1 };
+
+				if ( i === 0 && colorAttachmentsConfig.clearValue ) {
+
+					clearValue = colorAttachmentsConfig.clearValue;
+
+				}
+
 				colorAttachments.push( {
 					view,
 					depthSlice: sliceIndex,
 					resolveTarget,
-					loadOp: GPULoadOp.Load,
-					storeOp: GPUStoreOp.Store,
-					...colorAttachmentsConfig
+					loadOp: colorAttachmentsConfig.loadOP || GPULoadOp.Load,
+					storeOp: colorAttachmentsConfig.storeOP || GPUStoreOp.Store,
+					clearValue: clearValue
 				} );
 
 			}
@@ -819,6 +830,30 @@ class WebGPUBackend extends Backend {
 	}
 
 	/**
+	 * Returns the clear color and alpha into a single
+	 * color object.
+	 *
+	 * @return {Color4} The clear color.
+	 */
+	getClearColor() {
+
+		const clearColor = super.getClearColor();
+
+		// only premultiply alpha when alphaMode is "premultiplied"
+
+		if ( this.renderer.alpha === true ) {
+
+			clearColor.r *= clearColor.a;
+			clearColor.g *= clearColor.a;
+			clearColor.b *= clearColor.a;
+
+		}
+
+		return clearColor;
+
+	}
+
+	/**
 	 * Performs a clear operation.
 	 *
 	 * @param {boolean} color - Whether the color buffer should be cleared or not.
@@ -842,20 +877,7 @@ class WebGPUBackend extends Backend {
 		if ( color ) {
 
 			const clearColor = this.getClearColor();
-
-			if ( this.renderer.alpha === true ) {
-
-				// premultiply alpha
-
-				const a = clearColor.a;
-
-				clearValue = { r: clearColor.r * a, g: clearColor.g * a, b: clearColor.b * a, a: a };
-
-			} else {
-
-				clearValue = { r: clearColor.r, g: clearColor.g, b: clearColor.b, a: clearColor.a };
-
-			}
+			clearValue = { r: clearColor.r, g: clearColor.g, b: clearColor.b, a: clearColor.a };
 
 		}
 
@@ -1209,6 +1231,13 @@ class WebGPUBackend extends Backend {
 				const drawCount = object._multiDrawCount;
 				const drawInstances = object._multiDrawInstances;
 
+				if ( drawInstances !== null ) {
+
+					// @deprecated, r174
+					warnOnce( 'THREE.WebGPUBackend: renderMultiDrawInstances has been deprecated and will be removed in r184. Append to renderMultiDraw arguments and use indirection.' );
+
+				}
+
 				for ( let i = 0; i < drawCount; i ++ ) {
 
 					const count = drawInstances ? drawInstances[ i ] : 1;
@@ -1223,6 +1252,8 @@ class WebGPUBackend extends Backend {
 						passEncoderGPU.draw( counts[ i ], count, starts[ i ], firstInstance );
 
 					}
+
+					info.update( object, counts[ i ], count );
 
 				}
 

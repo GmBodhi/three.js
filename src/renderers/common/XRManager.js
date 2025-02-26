@@ -208,7 +208,7 @@ class XRManager extends EventDispatcher {
 
 		/**
 		 * The animation loop which is used as a replacement for the default
-		 * animation loop of the applicatio. It is only used when a XR session
+		 * animation loop of the application. It is only used when a XR session
 		 * is active.
 		 *
 		 * @private
@@ -620,7 +620,8 @@ class XRManager extends EventDispatcher {
 						colorSpace: renderer.outputColorSpace,
 						depthTexture: new DepthTexture( glProjLayer.textureWidth, glProjLayer.textureHeight, depthType, undefined, undefined, undefined, undefined, undefined, undefined, depthFormat ),
 						stencilBuffer: renderer.stencil,
-						samples: renderer.samples
+						resolveDepthBuffer: ( glProjLayer.ignoreDepthValues === false ),
+						resolveStencilBuffer: ( glProjLayer.ignoreDepthValues === false ),
 					} );
 
 				this._xrRenderTarget.hasExternalTextures = true;
@@ -652,7 +653,9 @@ class XRManager extends EventDispatcher {
 						format: RGBAFormat,
 						type: UnsignedByteType,
 						colorSpace: renderer.outputColorSpace,
-						stencilBuffer: renderer.stencil
+						stencilBuffer: renderer.stencil,
+						resolveDepthBuffer: ( glBaseLayer.ignoreDepthValues === false ),
+						resolveStencilBuffer: ( glBaseLayer.ignoreDepthValues === false ),
 					}
 				);
 
@@ -870,7 +873,7 @@ function updateCamera( camera, parent ) {
 }
 
 /**
- * Updates the given camera with the transfomration of the XR camera and parent object.
+ * Updates the given camera with the transformation of the XR camera and parent object.
  *
  * @inner
  * @param {Camera} camera - The camera to update.
