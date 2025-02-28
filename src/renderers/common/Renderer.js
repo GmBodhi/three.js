@@ -252,7 +252,7 @@ class Renderer {
 		this._getFallback = getFallback;
 
 		/**
-		 * The renderer's pixel ration.
+		 * The renderer's pixel ratio.
 		 *
 		 * @private
 		 * @type {number}
@@ -611,7 +611,7 @@ class Renderer {
 		 * A reference to the promise which initializes the renderer.
 		 *
 		 * @private
-		 * @type {?Promise}
+		 * @type {?Promise<this>}
 		 * @default null
 		 */
 		this._initPromise = null;
@@ -711,7 +711,7 @@ class Renderer {
 	 * Initializes the renderer so it is ready for usage.
 	 *
 	 * @async
-	 * @return {Promise} A Promise that resolves when the renderer has been initialized.
+	 * @return {Promise<this>} A Promise that resolves when the renderer has been initialized.
 	 */
 	async init() {
 
@@ -780,7 +780,7 @@ class Renderer {
 			this._animation.start();
 			this._initialized = true;
 
-			resolve();
+			resolve( this );
 
 		} );
 
@@ -1451,9 +1451,16 @@ class Renderer {
 		// a clear operation clears the intermediate renderTarget texture, but should not update the screen canvas.
 
 		const currentAutoClear = this.autoClear;
+		const currentXR = this.xr.enabled;
+
 		this.autoClear = false;
+		this.xr.enabled = false;
+
 		this._renderScene( quad, quad.camera, false );
+
 		this.autoClear = currentAutoClear;
+		this.xr.enabled = currentXR;
+
 
 	}
 
@@ -1568,7 +1575,7 @@ class Renderer {
 	}
 
 	/**
-	 * Sets the given pixel ration and resizes the canvas if necessary.
+	 * Sets the given pixel ratio and resizes the canvas if necessary.
 	 *
 	 * @param {number} [value=1] - The pixel ratio.
 	 */
@@ -1917,7 +1924,7 @@ class Renderer {
 			renderContext.depth = renderTarget.depthBuffer;
 			renderContext.stencil = renderTarget.stencilBuffer;
 			// #30329
-			renderContext.clearColorValue = this._clearColor;
+			renderContext.clearColorValue = this.backend.getClearColor();
 
 		}
 
@@ -2051,7 +2058,7 @@ class Renderer {
 	 */
 	get isOutputTarget() {
 
-		return this._renderTarget === this._outputRenderTarget;
+		return this._renderTarget === this._outputRenderTarget || this._renderTarget === null;
 
 	}
 

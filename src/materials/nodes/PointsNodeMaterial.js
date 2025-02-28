@@ -11,9 +11,9 @@ import { PointsMaterial } from '../PointsMaterial.js';
 const _defaultValues = /*@__PURE__*/ new PointsMaterial();
 
 /**
- * Node material version of `PointsMaterial`.
+ * Node material version of {@link PointsMaterial}.
  *
- * @augments NodeMaterial
+ * @augments SpriteNodeMaterial
  */
 class PointsNodeMaterial extends SpriteNodeMaterial {
 
@@ -26,7 +26,7 @@ class PointsNodeMaterial extends SpriteNodeMaterial {
 	/**
 	 * Constructs a new points node material.
 	 *
-	 * @param {?Object} parameters - The configuration parameter.
+	 * @param {Object} [parameters] - The configuration parameter.
 	 */
 	constructor( parameters ) {
 
